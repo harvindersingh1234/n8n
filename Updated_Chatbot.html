@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HR Assistant Chatbot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Poppins',sans-serif;
+      background:linear-gradient(135deg,#eef2ff,#dbeafe);
+      height:100vh;
+      display:flex; justify-content:center; align-items:center;
+      padding:20px;
+    }
+    .chat-container {
+      width:100%; max-width:540px; height:820px;
+      background:#f3f4f6; border-radius:24px; overflow:hidden;
+      display:flex; flex-direction:column;
+      box-shadow:0 20px 40px rgba(0,0,0,0.15);
+    }
+    .chat-header {
+      background:linear-gradient(135deg,#2563eb,#4338ca);
+      color:white; padding:24px;
+      display:flex; align-items:center; gap:16px;
+    }
+    .bot-avatar {
+      width:56px; height:56px;
+      background:rgba(255,255,255,0.15);
+      border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:28px;
+    }
+    .header-content h1 { font-size:30px; font-weight:700; line-height:1.2; }
+    .status { margin-top:6px; display:flex; align-items:center; gap:8px; font-size:15px; color:rgba(255,255,255,0.9); }
+    .status-dot { width:10px; height:10px; background:#22c55e; border-radius:50%; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .chat-box {
+      flex:1; padding:24px; overflow-y:auto;
+      display:flex; flex-direction:column; gap:20px;
+    }
+    .message-row { display:flex; align-items:flex-end; gap:12px; }
+    .small-avatar {
+      width:42px; height:42px; background:#e0e7ff;
+      border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:20px; flex-shrink:0;
+    }
+    .message {
+      max-width:80%; padding:18px 20px; border-radius:18px;
+      font-size:16px; line-height:1.7; word-wrap:break-word;
+      white-space:pre-wrap;
+    }
+    .bot-message { background:#e5e7eb; color:#111827; border-bottom-left-radius:6px; }
+    .user-wrapper { display:flex; justify-content:flex-end; }
+    .user-message { background:linear-gradient(135deg,#2563eb,#4338ca); color:white; border-bottom-right-radius:6px; }
+    .chat-input { padding:20px; background:#f3f4f6; border-top:1px solid #d1d5db; }
+    .input-wrapper { display:flex; align-items:center; gap:14px; }
+    .chat-input input {
+      flex:1; border:1px solid #d1d5db; background:white;
+      padding:18px 20px; border-radius:18px; outline:none;
+      font-size:16px; font-family:'Poppins',sans-serif;
+      transition:border-color 0.2s;
+    }
+    .chat-input input:focus { border-color:#2563eb; }
+    .chat-input input::placeholder { color:#9ca3af; }
+    .chat-input input:disabled { background:#f9fafb; cursor:not-allowed; }
+    .send-btn {
+      width:54px; height:54px; border:none; border-radius:16px;
+      background:linear-gradient(135deg,#2563eb,#4338ca);
+      color:white; font-size:22px; cursor:pointer;
+      transition:transform 0.2s ease;
+    }
+    .send-btn:hover { transform:scale(1.05); }
+    .footer-text { text-align:center; font-size:13px; color:#94a3b8; padding:0 20px 16px; }
+    .typing { font-size:14px; color:#6b7280; margin-left:54px; font-style:italic; }
+    @media (max-width:600px) {
+      body { padding:0; }
+      .chat-container { height:100vh; border-radius:0; }
+      .header-content h1 { font-size:24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+
+    <div class="chat-header">
+      <div class="bot-avatar">🤖</div>
+      <div class="header-content">
+        <h1>HR Assistant</h1>
+        <div class="status">
+          <div class="status-dot"></div>
+          Online · Powered by company documents
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+      <div class="message-row">
+        <div class="small-avatar">🤖</div>
+        <div class="message bot-message">
+          Hello! I'm your HR Assistant. I can answer questions about company policies, leave, benefits, and more. How can I help you today?
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <div class="input-wrapper">
+        <input type="text" id="userInput" placeholder="Ask about leave policy, benefits..." autocomplete="off"/>
+        <button class="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+
+    <div class="footer-text">Responses are based on internal company documents only</div>
+  </div>
+
+  <script>
+
+    // ══════════════════════════════════════════
+    // CONFIGURATION
+    // ══════════════════════════════════════════
+    const WEBHOOK_URL = "https://harvindersingh11.app.n8n.cloud/webhook/mychatbot";
+
+    // Persistent session ID — survives page refresh
+    // Each user gets their own session stored in browser
+    let SESSION_ID = localStorage.getItem("hr_chat_session");
+    if (!SESSION_ID) {
+      SESSION_ID = crypto.randomUUID().replace(/-/g, "");
+      localStorage.setItem("hr_chat_session", SESSION_ID);
+    }
+    console.log("Session ID:", SESSION_ID);
+    // ══════════════════════════════════════════
+
+    const chatBox   = document.getElementById("chatBox");
+    const userInput = document.getElementById("userInput");
+
+    function addUserMessage(message) {
+      const wrapper = document.createElement("div");
+      wrapper.classList.add("user-wrapper");
+      wrapper.innerHTML = `<div class="message user-message">${message}</div>`;
+      chatBox.appendChild(wrapper);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function addBotMessage(message) {
+      const row = document.createElement("div");
+      row.classList.add("message-row");
+      row.innerHTML = `
+        <div class="small-avatar">🤖</div>
+        <div class="message bot-message">${message}</div>
+      `;
+      chatBox.appendChild(row);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function showTyping() {
+      const typing = document.createElement("div");
+      typing.classList.add("typing");
+      typing.id = "typing";
+      typing.innerText = "HR Assistant is typing...";
+      chatBox.appendChild(typing);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function removeTyping() {
+      const el = document.getElementById("typing");
+      if (el) el.remove();
+    }
+
+    async function sendMessage() {
+      const message = userInput.value.trim();
+      if (!message) return;
+
+      addUserMessage(message);
+      userInput.value = "";
+      userInput.disabled = true;
+      showTyping();
+
+      try {
+        const response = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action:    "sendMessage",  // helps n8n identify request type
+            sessionId: SESSION_ID,     // persistent per browser/user
+            chatInput: message         // the user's question
+          })
+        });
+
+        removeTyping();
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        // Handle both plain text and JSON responses from n8n
+        const rawText = await response.text();
+        console.log("Raw response:", rawText);
+
+        let botReply;
+        try {
+          const data = JSON.parse(rawText);
+          console.log("Parsed response:", data);
+          // Try all common n8n response field names
+          botReply =
+            data.output                              ||
+            data.text                                ||
+            data.reply                               ||
+            data.message                             ||
+            data.answer                              ||
+            (Array.isArray(data) && data[0]?.output) ||
+            JSON.stringify(data);
+        } catch {
+          // Response is plain text
+          botReply = rawText;
+        }
+
+        addBotMessage(botReply);
+
+      } catch (error) {
+        removeTyping();
+        console.error("Chatbot error:", error);
+        addBotMessage("⚠️ Unable to connect to HR Assistant. Please try again.");
+      } finally {
+        userInput.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    userInput.addEventListener("keypress", function(e) {
+      if (e.key === "Enter") sendMessage();
+    });
+
+  </script>
+</body>
+</html>
